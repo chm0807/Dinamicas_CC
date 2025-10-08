@@ -13,7 +13,7 @@ app.use(bodyParser.json());
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'botpress_dinamicas';
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-const SHEET_NAME = process.env.SHEET_NAME;
+const SHEET_NAME = process.env.SHEET_NAME || 'Boleteria'; // <- Nombre de la hoja
 
 // ------------------
 // Google Service Account (JSON string en variable)
@@ -251,4 +251,4 @@ Davivienda (Corriente): 987654321 - Dinamicas CC
 // Iniciar servidor
 // ------------------
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`)); 
+app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`));
