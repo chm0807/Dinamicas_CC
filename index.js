@@ -41,18 +41,11 @@ async function verificarNumero(numero) {
     });
 
     const rows = res.data.values || [];
-    console.log(`📄 Datos leídos (${rows.length} filas):`, rows);
-
     for (let row of rows) {
       const num = parseInt((row[0] || '').toString().trim());
       const estado = (row[1] || '').toString().toLowerCase().trim();
-      if (num === numero) {
-        console.log(`✅ Coincidencia: ${num} - Estado: ${estado}`);
-        return estado === 'disponible';
-      }
+      if (num === numero) return estado === 'disponible';
     }
-
-    console.log(`⚠️ Número ${numero} no encontrado en hoja ${SHEET_NAME}`);
     return false;
   } catch (error) {
     console.error("❌ Error leyendo hoja:", error.response?.data || error.message);
@@ -60,12 +53,12 @@ async function verificarNumero(numero) {
   }
 }
 
-async function marcarVendida(numero, cliente) {
+async function marcarVendida(numero, cliente, nombre, telefono) {
   const client = await auth.getClient();
   const sheets = google.sheets({ version: 'v4', auth: client });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:B`,
+    range: `${SHEET_NAME}!A:D`,
   });
 
   const rows = res.data.values || [];
@@ -80,9 +73,9 @@ async function marcarVendida(numero, cliente) {
   if (rowIndex !== -1) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAME}!B${rowIndex}`,
+      range: `${SHEET_NAME}!B${rowIndex}:D${rowIndex}`,
       valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [['vendido']] },
+      requestBody: { values: [['vendido', nombre || '', telefono || '']] },
     });
   }
 }
@@ -141,9 +134,7 @@ Selecciona la boleta para asegurar tu oportunidad ✨`,
         sections: [
           {
             title: "Boleta",
-            rows: [
-              { id: "tres_de_oros", title: "Tres de Oros $60.000" },
-            ],
+            rows: [{ id: "tres_de_oros", title: "Tres de Oros $60.000" }],
           },
         ],
       },
@@ -192,7 +183,6 @@ app.post("/webhook", async (req, res) => {
       const message = changes.messages[0];
       const from = message.from;
       const phone_number_id = changes.metadata.phone_number_id;
-
       const text = message.text?.body?.toLowerCase() || "";
       const interactiveId =
         message.interactive?.button_reply?.id ||
@@ -209,70 +199,100 @@ app.post("/webhook", async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // Flujo de texto
+      // Flujo principal
       if (text.includes("hola") || text.includes("boletas")) {
         await sendInteractiveList(phone_number_id, from);
         userState[from] = { esperandoBoleta: true };
-      } else if (userState[from]?.esperandoBoleta) {
+      } 
+      else if (userState[from]?.esperandoBoleta) {
         if (interactiveId === "tres_de_oros" || text.includes("tres de oros")) {
           await enviarMensaje(
             phone_number_id,
             from,
-            "🎟️ Excelente elección! Ahora cuéntame, ¿qué número deseas?"
+            "🎟️ Excelente elección! ¿Deseas una sola boleta o varias?"
           );
-          userState[from] = { esperandoNumero: true };
+          userState[from] = { eligiendoCantidad: true };
         }
-      } else if (userState[from]?.esperandoNumero) {
+      }
+      else if (userState[from]?.eligiendoCantidad) {
+        if (text.includes("una")) {
+          await enviarMensaje(phone_number_id, from, "Perfecto 🙌, ¿qué número deseas?");
+          userState[from] = { esperandoNumero: true };
+        } else if (text.includes("varias")) {
+          await enviarMensaje(phone_number_id, from, "Genial 😎, envíame los números separados por comas (ej: 1, 2, 3)");
+          userState[from] = { esperandoVariosNumeros: true };
+        } else {
+          await enviarMensaje(phone_number_id, from, "Por favor responde 'una' o 'varias'.");
+        }
+      }
+      else if (userState[from]?.esperandoNumero) {
         const numeroDeseado = parseInt(text);
         if (isNaN(numeroDeseado)) {
-          await enviarMensaje(
-            phone_number_id,
-            from,
-            "Por favor ingresa un número válido, debe ser un número."
-          );
+          await enviarMensaje(phone_number_id, from, "Por favor ingresa un número válido.");
         } else {
           const disponible = await verificarNumero(numeroDeseado);
           if (disponible) {
-            userState[from] = { esperandoConfirmacion: true, numeroDeseado };
-            await enviarMensaje(
-              phone_number_id,
-              from,
-              `🎯 El número ${numeroDeseado} está disponible. ¿Deseas confirmarlo? (responde "sí" o "no")`
-            );
+            userState[from] = { esperandoNombre: true, numeroDeseado };
+            await enviarMensaje(phone_number_id, from, `🎯 El número ${numeroDeseado} está disponible. ¿A nombre de quién deseas reservarlo?`);
           } else {
-            await enviarMensaje(
-              phone_number_id,
-              from,
-              `😅 El número ${numeroDeseado} ya fue vendido. Por favor elige otro.`
-            );
+            await enviarMensaje(phone_number_id, from, `😅 El número ${numeroDeseado} ya fue vendido. Por favor elige otro.`);
           }
         }
-      } else if (userState[from]?.esperandoConfirmacion) {
+      } 
+      else if (userState[from]?.esperandoVariosNumeros) {
+        const numeros = text.split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+        if (numeros.length === 0) {
+          await enviarMensaje(phone_number_id, from, "Por favor ingresa al menos un número válido.");
+        } else {
+          let disponibles = [];
+          let vendidos = [];
+          for (const n of numeros) {
+            const libre = await verificarNumero(n);
+            if (libre) disponibles.push(n);
+            else vendidos.push(n);
+          }
+
+          if (disponibles.length > 0) {
+            userState[from] = { esperandoNombreVarios: true, disponibles };
+            await enviarMensaje(phone_number_id, from, `✅ Los números ${disponibles.join(", ")} están disponibles. ¿A nombre de quién deseas reservarlos?`);
+          } else {
+            await enviarMensaje(phone_number_id, from, `😅 Todos los números ingresados ya fueron vendidos. Intenta con otros.`);
+          }
+
+          if (vendidos.length > 0) {
+            await enviarMensaje(phone_number_id, from, `⚠️ Los siguientes números ya están vendidos: ${vendidos.join(", ")}`);
+          }
+        }
+      }
+      else if (userState[from]?.esperandoNombreVarios) {
+        const nombre = text.trim();
+        const { disponibles } = userState[from];
+        for (const n of disponibles) {
+          await marcarVendida(n, from, nombre, from);
+        }
+        await enviarMensaje(phone_number_id, from, `✅ Listo ${nombre}, tus números ${disponibles.join(", ")} han sido reservados.\n💰 Valor total: $${disponibles.length * 60000}\n\n🏦 *Bancolombia:* 123456789\n🏦 *Davivienda:* 987654321\n\nEnvíame la **foto del comprobante de pago** aquí 📸`);
+        userState[from] = { esperandoPago: true };
+      }
+      else if (userState[from]?.esperandoNombre) {
+        const nombreCliente = text.trim();
+        userState[from] = { esperandoConfirmacion: true, numeroDeseado: userState[from].numeroDeseado, nombre: nombreCliente };
+        await enviarMensaje(phone_number_id, from, `Perfecto ${nombreCliente}! ¿Confirmas tu reserva? (responde "sí" o "no")`);
+      }
+      else if (userState[from]?.esperandoConfirmacion) {
         if (text.includes("sí")) {
-          const numero = userState[from].numeroDeseado;
-          await marcarVendida(numero, from);
-          await enviarMensaje(
-            phone_number_id,
-            from,
-            `✅ Perfecto, tu número ${numero} ha sido reservado.\n\nPor favor realiza el pago de $60.000 a una de las siguientes cuentas:\n\n🏦 **Bancolombia (Ahorros):** 123456789 - Dinámicas CC\n🏦 **Davivienda (Corriente):** 987654321 - Dinámicas CC\n\nLuego envíame la **foto del comprobante de pago** aquí 📸`
-          );
+          const { numeroDeseado, nombre } = userState[from];
+          await marcarVendida(numeroDeseado, from, nombre, from);
+          await enviarMensaje(phone_number_id, from, `✅ Listo ${nombre}, tu número ${numeroDeseado} ha sido reservado.\n\nPor favor realiza el pago de $60.000 a una de las siguientes cuentas:\n\n🏦 **Bancolombia:** 123456789\n🏦 **Davivienda:** 987654321\n\nLuego envíame la **foto del comprobante de pago** aquí 📸`);
           userState[from] = { esperandoPago: true };
         } else if (text.includes("no")) {
           userState[from] = { esperandoNumero: true };
-          await enviarMensaje(
-            phone_number_id,
-            from,
-            "No hay problema 😄, dime otro número que desees."
-          );
+          await enviarMensaje(phone_number_id, from, "No hay problema 😄, dime otro número que desees.");
         } else {
-          await enviarMensaje(
-            phone_number_id,
-            from,
-            'Por favor responde con "sí" o "no".'
-          );
+          await enviarMensaje(phone_number_id, from, 'Por favor responde con "sí" o "no".');
         }
-      } else {
-        await enviarMensaje(phone_number_id, from, `Hola! Recibí tu mensaje: "${text}"`);
+      } 
+      else {
+        await enviarMensaje(phone_number_id, from, `👋 ¡Hola! Recibí tu mensaje: "${text}". Si deseas participar en nuestras rifas, escribe "hola" o "boletas" 🎟️`);
       }
     }
   }
@@ -283,5 +303,5 @@ app.post("/webhook", async (req, res) => {
 // ------------------
 // Iniciar servidor
 // ------------------
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8080; 
 app.listen(PORT, () => console.log(`🚀 Bot corriendo en puerto ${PORT}`));
