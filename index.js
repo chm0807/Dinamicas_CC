@@ -15,8 +15,18 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME;
 
-const fs = require('fs');
-const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT, 'utf8'));
+let credentials;
+if (process.env.GOOGLE_SERVICE_ACCOUNT) {
+  // Railway: variable tipo archivo
+  try {
+    credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT, 'utf8'));
+  } catch {
+    // Desarrollo: variable JSON en .env
+    credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+  }
+} else {
+  console.error('No se encontró GOOGLE_SERVICE_ACCOUNT');
+}
 
 // ------------------
 // Estado temporal de usuarios
