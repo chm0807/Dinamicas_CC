@@ -63,7 +63,7 @@ async function marcarVendida(numero, cliente) {
   let rowIndex = -1;
   for (let i = 0; i < rows.length; i++) {
     if (parseInt(rows[i][0]) === numero) {
-      rowIndex = i + 1;
+      rowIndex = i + 1; // Google Sheets empieza en 1
       break;
     }
   }
@@ -115,10 +115,10 @@ async function sendInteractiveList(phone_number_id, to) {
     type: "interactive",
     interactive: {
       type: "list",
-      header: { type: "text", text: "🎟️ Rifas Dinamicas CC" },
+      header: { type: "text", text: "🎟️ Dinamicas CC - Rifas Tres de Oros ♣️" },
       body: {
         text: `🎉 ¡Hola! Qué alegría verte 😍
-Boleta única: Tres de Oros♣️
+En Rifas Tres de Oros tenemos boleta única: Apuesta tu suerte♣️
 🏍️ 2 motos Boxer CT 125
 🚙 1 Subaru Forester
 🔖 5 millones en oro
