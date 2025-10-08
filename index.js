@@ -39,7 +39,7 @@ async function verificarNumero(numero) {
   const sheets = google.sheets({ version: 'v4', auth: client });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:C`,
+    range: `${SHEET_NAME}!A:B`, // SOLO A:B
   });
 
   const rows = res.data.values || [];
@@ -51,12 +51,12 @@ async function verificarNumero(numero) {
   return false;
 }
 
-async function marcarVendida(numero, cliente) {
+async function marcarVendida(numero) {
   const client = await auth.getClient();
   const sheets = google.sheets({ version: 'v4', auth: client });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:C`,
+    range: `${SHEET_NAME}!A:B`,
   });
 
   const rows = res.data.values || [];
@@ -71,9 +71,9 @@ async function marcarVendida(numero, cliente) {
   if (rowIndex !== -1) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAME}!B${rowIndex}:C${rowIndex}`,
+      range: `${SHEET_NAME}!B${rowIndex}`, // SOLO columna Estado
       valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [['vendido', cliente]] },
+      requestBody: { values: [['vendido']] },
     });
   }
 }
@@ -85,23 +85,11 @@ async function enviarMensaje(phone_number_id, to, text) {
   try {
     await axios.post(
       `https://graph.facebook.com/v17.0/${phone_number_id}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to,
-        text: { body: text },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { messaging_product: "whatsapp", to, text: { body: text } },
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error(
-      "Error enviando mensaje:",
-      error.response ? error.response.data : error.message
-    );
+    console.error("Error enviando mensaje:", error.response ? error.response.data : error.message);
   }
 }
 
@@ -127,17 +115,7 @@ En Rifas Tres de Oros tenemos boleta única: Apuesta tu suerte♣️
 Selecciona la boleta para asegurar tu oportunidad ✨`,
       },
       footer: { text: "Dinamicas CC" },
-      action: {
-        button: "Adquirir boleta",
-        sections: [
-          {
-            title: "Boleta",
-            rows: [
-              { id: "tres_de_oros", title: "Tres de Oros $60.000" } // ≤24 caracteres
-            ],
-          },
-        ],
-      },
+      action: { button: "Adquirir boleta", sections: [{ title: "Boleta", rows: [{ id: "tres_de_oros", title: "Tres de Oros $60.000" }] }] },
     },
   };
 
@@ -145,18 +123,10 @@ Selecciona la boleta para asegurar tu oportunidad ✨`,
     await axios.post(
       `https://graph.facebook.com/v17.0/${phone_number_id}/messages`,
       data,
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error(
-      "Error enviando lista:",
-      error.response ? error.response.data : error.message
-    );
+    console.error("Error enviando lista:", error.response ? error.response.data : error.message);
   }
 }
 
@@ -184,65 +154,39 @@ app.post("/webhook", async (req, res) => {
       const from = message.from;
       const phone_number_id = changes.metadata.phone_number_id;
 
-      // Texto normal
       let text = message.text?.body?.toLowerCase() || "";
-      // Respuesta interactiva (lista/botón)
-      let interactiveId =
-        message.interactive?.button_reply?.id ||
-        message.interactive?.list_reply?.id;
+      let interactiveId = message.interactive?.button_reply?.id || message.interactive?.list_reply?.id;
 
-      // --- Lógica de estados ---
       if (text.includes("hola") || text.includes("boletas")) {
         await sendInteractiveList(phone_number_id, from);
-        userState[from] = { ...userState[from], esperandoBoleta: true };
+        userState[from] = { esperandoBoleta: true };
       } 
       else if (userState[from]?.esperandoBoleta) {
         if (interactiveId === "tres_de_oros" || text.includes("tres de oros")) {
-          await enviarMensaje(
-            phone_number_id,
-            from,
-            "🎟️ Excelente elección! Ahora cuéntame, ¿qué número deseas?"
-          );
-          userState[from] = { ...userState[from], esperandoNumero: true };
+          await enviarMensaje(phone_number_id, from, "🎟️ Excelente elección! Ahora cuéntame, ¿qué número deseas?");
+          userState[from] = { esperandoNumero: true };
         }
       } 
       else if (userState[from]?.esperandoNumero) {
         const numeroDeseado = parseInt(text);
         if (isNaN(numeroDeseado)) {
-          await enviarMensaje(
-            phone_number_id,
-            from,
-            "Por favor ingresa un número válido, debe ser de 4 cifras."
-          );
+          await enviarMensaje(phone_number_id, from, "Por favor ingresa un número válido, debe ser de 4 cifras.");
         } else {
           const disponible = await verificarNumero(numeroDeseado);
           if (disponible) {
-            const reply = `🎟️ Tu número ${numeroDeseado} está disponible.
-Realiza la transferencia del costo de la boleta, recuerda que tiene un costo de: $60.000 a una de estas cuentas:
+            await marcarVendida(numeroDeseado);
+            await enviarMensaje(phone_number_id, from, `🎟️ Tu número ${numeroDeseado} está disponible.
+Realiza la transferencia del costo de la boleta ($60.000).
 
-Bancolombia (Ahorros): 123456789 - Dinamicas CC
-Davivienda (Corriente): 987654321 - Dinamicas CC
-
-¡Muchísima suerte! 🍀`;
-
-            await marcarVendida(numeroDeseado, from);
+¡Muchísima suerte! 🍀`);
             delete userState[from];
-            await enviarMensaje(phone_number_id, from, reply);
           } else {
-            await enviarMensaje(
-              phone_number_id,
-              from,
-              `Lo sentimos 😅, el número ${numeroDeseado} ya no está disponible. Elige otro número.`
-            );
+            await enviarMensaje(phone_number_id, from, `Lo sentimos 😅, el número ${numeroDeseado} ya no está disponible. Elige otro número.`);
           }
         }
       } 
       else {
-        await enviarMensaje(
-          phone_number_id,
-          from,
-          `Hola! Recibí tu mensaje: "${text}"`
-        );
+        await enviarMensaje(phone_number_id, from, `Hola! Recibí tu mensaje: "${text}"`);
       }
     }
   }
