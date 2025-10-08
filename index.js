@@ -39,7 +39,7 @@ async function verificarNumero(numero) {
     const sheets = google.sheets({ version: 'v4', auth: client });
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAME}!A:B`,
+        range: `'${SHEET_NAME}'!A:B`,
     });
 
     const rows = res.data.values || [];
@@ -56,7 +56,7 @@ async function marcarVendida(numero, cliente) {
     const sheets = google.sheets({ version: 'v4', auth: client });
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAME}!A:B`,
+        range: `'${SHEET_NAME}'!A:B`,
     });
 
     const rows = res.data.values || [];
@@ -71,7 +71,7 @@ async function marcarVendida(numero, cliente) {
     if (rowIndex !== -1) {
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!B${rowIndex}:C${rowIndex}`,
+            range: `'${SHEET_NAME}'!B${rowIndex}:C${rowIndex}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [['vendido', cliente]] },
         });
@@ -83,7 +83,7 @@ async function getBoletasDisponibles() {
     const sheets = google.sheets({ version: 'v4', auth: client });
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAME}!A:B`,
+        range: `'${SHEET_NAME}'!A:B`,
     });
 
     const rows = res.data.values || [];
