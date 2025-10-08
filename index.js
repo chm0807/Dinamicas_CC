@@ -39,7 +39,7 @@ async function verificarNumero(numero) {
     const sheets = google.sheets({ version: 'v4', auth: client });
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAME}!A:B`,
+        range: `'${SHEET_NAME}'!A:B`,
     });
 
     const rows = res.data.values || [];
@@ -56,7 +56,7 @@ async function marcarVendida(numero, cliente) {
     const sheets = google.sheets({ version: 'v4', auth: client });
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAME}!A:B`,
+        range: `'${SHEET_NAME}'!A:B`,
     });
 
     const rows = res.data.values || [];
@@ -71,11 +71,33 @@ async function marcarVendida(numero, cliente) {
     if (rowIndex !== -1) {
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!B${rowIndex}:C${rowIndex}`,
+            range: `'${SHEET_NAME}'!B${rowIndex}:C${rowIndex}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [['vendido', cliente]] },
         });
     }
+}
+
+async function getBoletasDisponibles() {
+    const client = await auth.getClient();
+    const sheets = google.sheets({ version: 'v4', auth: client });
+    const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${SHEET_NAME}'!A:B`,
+    });
+
+    const rows = res.data.values || [];
+    const disponibles = [];
+    for (let row of rows) {
+        const numero = row[0];
+        const estado = row[1].toLowerCase();
+        if (estado === "disponible") {
+            let title = `Boleta #${numero}`;
+            if (title.length > 24) title = title.substring(0, 24);
+            disponibles.push({ id: numero.toString(), title });
+        }
+    }
+    return disponibles;
 }
 
 // ------------------
@@ -103,32 +125,6 @@ async function enviarMensaje(phone_number_id, to, text) {
             error.response ? error.response.data : error.message
         );
     }
-}
-
-// ------------------
-// Obtener boletas disponibles
-// ------------------
-async function getBoletasDisponibles() {
-    const client = await auth.getClient();
-    const sheets = google.sheets({ version: 'v4', auth: client });
-    const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAME}!A:B`,
-    });
-
-    const rows = res.data.values || [];
-    const disponibles = [];
-    for (let row of rows) {
-        const numero = row[0];
-        const estado = row[1].toLowerCase();
-        if (estado === "disponible") {
-            // WhatsApp solo permite títulos de max 24 caracteres
-            let title = `Boleta #${numero}`;
-            if (title.length > 24) title = title.substring(0, 24);
-            disponibles.push({ id: numero.toString(), title });
-        }
-    }
-    return disponibles;
 }
 
 // ------------------
@@ -255,4 +251,4 @@ Davivienda (Corriente): 987654321 - Dinamicas CC
 // Iniciar servidor
 // ------------------
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`Bot corriendo en puerto ${PORT}`)); 
