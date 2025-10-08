@@ -14,7 +14,9 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'botpress_dinamicas';
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME;
-const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+
+const fs = require('fs');
+const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT, 'utf8'));
 
 // ------------------
 // Estado temporal de usuarios
