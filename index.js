@@ -43,7 +43,7 @@ async function verificarNumero(numero) {
         range: `'${SHEET_NAME}'!A:B`,
     });
 
-    const rows = (res.data.values || []).filter(r => r.length >= 2 && r[0]);
+    const rows = res.data.values || [];
     for (let row of rows) {
         if (parseInt(row[0]) === numero) {
             return row[1].toLowerCase() === 'disponible';
@@ -61,7 +61,7 @@ async function marcarVendida(numero, cliente) {
         range: `'${SHEET_NAME}'!A:B`,
     });
 
-    const rows = (res.data.values || []).filter(r => r.length >= 2 && r[0]);
+    const rows = res.data.values || [];
     let rowIndex = -1;
     for (let i = 0; i < rows.length; i++) {
         if (parseInt(rows[i][0]) === numero) {
@@ -89,12 +89,12 @@ async function getBoletasDisponibles() {
         range: `'${SHEET_NAME}'!A:B`,
     });
 
-    const rows = (res.data.values || []).filter(r => r.length >= 2 && r[0]);
+    const rows = res.data.values || [];
     const disponibles = [];
 
     for (let row of rows) {
         const numero = row[0];
-        const estado = row[1].toLowerCase();
+        const estado = row[1]?.toLowerCase() || "";
         if (estado === "disponible") {
             let title = `Boleta #${numero}`;
             if (title.length > 24) title = title.substring(0, 24);
