@@ -15,10 +15,9 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME;
 
-const fs = require('fs');
 
-// Esto lee el archivo temporal que Railway crea con tu variable
-const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT, 'utf8'));
+// Esto es todo, sin fs
+const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
 
 // ------------------
 // Estado temporal de usuarios
