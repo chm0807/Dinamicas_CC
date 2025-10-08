@@ -39,7 +39,7 @@ async function verificarNumero(numero) {
   const sheets = google.sheets({ version: 'v4', auth: client });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:C`,
+    range: `${SHEET_NAME}!A:B`,
   });
 
   const rows = res.data.values || [];
@@ -56,7 +56,7 @@ async function marcarVendida(numero, cliente) {
   const sheets = google.sheets({ version: 'v4', auth: client });
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET_NAME}!A:C`,
+    range: `${SHEET_NAME}!A:B`,
   });
 
   const rows = res.data.values || [];
@@ -106,36 +106,52 @@ async function enviarMensaje(phone_number_id, to, text) {
 }
 
 // ------------------
+// Obtener boletas disponibles
+// ------------------
+async function getBoletasDisponibles() {
+  const client = await auth.getClient();
+  const sheets = google.sheets({ version: 'v4', auth: client });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${SHEET_NAME}!A:B`,
+  });
+
+  const rows = res.data.values || [];
+  const disponibles = [];
+  for (let row of rows) {
+    const numero = row[0];
+    const estado = row[1].toLowerCase();
+    if (estado === "disponible") {
+      // WhatsApp solo permite títulos de max 24 caracteres
+      let title = `Boleta #${numero}`;
+      if (title.length > 24) title = title.substring(0, 24);
+      disponibles.push({ id: numero.toString(), title });
+    }
+  }
+  return disponibles;
+}
+
+// ------------------
 // Enviar lista interactiva
 // ------------------
 async function sendInteractiveList(phone_number_id, to) {
+  const rows = await getBoletasDisponibles();
+
+  if (rows.length === 0) {
+    await enviarMensaje(phone_number_id, to, "😅 Lo siento, no hay boletas disponibles por ahora.");
+    return;
+  }
+
   const data = {
     messaging_product: "whatsapp",
     to,
     type: "interactive",
     interactive: {
       type: "list",
-      header: { type: "text", text: "🎟️ Dinámicas CC - Rifas Tres de Oros♣️" },
-      body: {
-        text: `🎉 ¡Hola! Qué alegría verte 😍
-Te contamos que nuestra boleta única: Tres de Oros♣️
-🏍️ 2 motos Boxer CT 125 modelo 2026
-🚙 Una camioneta Subaru Forester
-🔖 5 millones representados en oro
-🎄 Gran parranda navideña el 20 de diciembre
-💰 Lo mejor de todo es que el valor de la boleta es de: $60.000
-Selecciona la boleta para asegurar tu oportunidad ✨`,
-      },
+      header: { type: "text", text: "🎟️ Boletas Dinamicas CC" },
+      body: { text: "Selecciona tu boleta disponible:" },
       footer: { text: "Dinamicas CC" },
-      action: {
-        button: "Adquirir boleta",
-        sections: [
-          {
-            title: "Boleta",
-            rows: [{ id: "tres_de_oros", title: "Tres de Oros♣️ - $60.000" }],
-          },
-        ],
-      },
+      action: { button: "Adquirir boleta", sections: [{ title: "Boletas disponibles", rows }] },
     },
   };
 
@@ -143,12 +159,7 @@ Selecciona la boleta para asegurar tu oportunidad ✨`,
     await axios.post(
       `https://graph.facebook.com/v17.0/${phone_number_id}/messages`,
       data,
-      {
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error(
@@ -195,7 +206,7 @@ app.post("/webhook", async (req, res) => {
         userState[from] = { esperandoBoleta: true };
       } 
       else if (userState[from]?.esperandoBoleta) {
-        if (interactiveId === "tres_de_oros" || text.includes("tres de oros")) {
+        if (interactiveId || text.includes("tres de oros") || text.includes("tres_de_oros")) {
           await enviarMensaje(
             phone_number_id,
             from,
@@ -216,12 +227,12 @@ app.post("/webhook", async (req, res) => {
           const disponible = await verificarNumero(numeroDeseado);
           if (disponible) {
             const reply = `🎟️ Tu número ${numeroDeseado} está disponible.
-Realiza la transferencia del costo de la boleta, recuerda que tiene un costo de: $60.000 a una de estas cuentas:
+Realiza la transferencia del costo de la boleta ($60.000) a una de estas cuentas:
 
 Bancolombia (Ahorros): 123456789 - Dinamicas CC
 Davivienda (Corriente): 987654321 - Dinamicas CC
 
-¡Muchísima suerte! que la suerte este de tu lado 🍀`;
+¡Muchísima suerte! 🍀`;
 
             await marcarVendida(numeroDeseado, from);
             delete userState[from];
@@ -230,7 +241,7 @@ Davivienda (Corriente): 987654321 - Dinamicas CC
             await enviarMensaje(
               phone_number_id,
               from,
-              `Lo sentimos 😅, el número ${numeroDeseado} ya no está disponible. Elige otro número no le huyas a la suerte.`
+              `Lo sentimos 😅, el número ${numeroDeseado} ya no está disponible. Elige otro número.`
             );
           }
         }
