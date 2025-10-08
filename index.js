@@ -194,7 +194,7 @@ app.post("/webhook", async (req, res) => {
       // --- Lógica de estados ---
       if (text.includes("hola") || text.includes("boletas")) {
         await sendInteractiveList(phone_number_id, from);
-        userState[from] = { esperandoBoleta: true };
+        userState[from] = { ...userState[from], esperandoBoleta: true };
       } 
       else if (userState[from]?.esperandoBoleta) {
         if (interactiveId === "tres_de_oros" || text.includes("tres de oros")) {
@@ -203,7 +203,7 @@ app.post("/webhook", async (req, res) => {
             from,
             "🎟️ Excelente elección! Ahora cuéntame, ¿qué número deseas?"
           );
-          userState[from] = { esperandoNumero: true };
+          userState[from] = { ...userState[from], esperandoNumero: true };
         }
       } 
       else if (userState[from]?.esperandoNumero) {
