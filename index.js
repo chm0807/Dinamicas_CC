@@ -13,7 +13,7 @@ app.use(bodyParser.json());
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'botpress_dinamicas';
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-const SHEET_NAME = process.env.SHEET_NAME || 'Boleteria'; // <- Nombre de la hoja
+const SHEET_NAME = process.env.SHEET_NAME;
 
 // ------------------
 // Google Service Account (JSON string en variable)
@@ -37,12 +37,13 @@ const auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
 async function verificarNumero(numero) {
     const client = await auth.getClient();
     const sheets = google.sheets({ version: 'v4', auth: client });
+
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: `'${SHEET_NAME}'!A:B`,
     });
 
-    const rows = res.data.values || [];
+    const rows = (res.data.values || []).filter(r => r.length >= 2 && r[0]);
     for (let row of rows) {
         if (parseInt(row[0]) === numero) {
             return row[1].toLowerCase() === 'disponible';
@@ -54,12 +55,13 @@ async function verificarNumero(numero) {
 async function marcarVendida(numero, cliente) {
     const client = await auth.getClient();
     const sheets = google.sheets({ version: 'v4', auth: client });
+
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: `'${SHEET_NAME}'!A:B`,
     });
 
-    const rows = res.data.values || [];
+    const rows = (res.data.values || []).filter(r => r.length >= 2 && r[0]);
     let rowIndex = -1;
     for (let i = 0; i < rows.length; i++) {
         if (parseInt(rows[i][0]) === numero) {
@@ -81,13 +83,15 @@ async function marcarVendida(numero, cliente) {
 async function getBoletasDisponibles() {
     const client = await auth.getClient();
     const sheets = google.sheets({ version: 'v4', auth: client });
+
     const res = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: `'${SHEET_NAME}'!A:B`,
     });
 
-    const rows = res.data.values || [];
+    const rows = (res.data.values || []).filter(r => r.length >= 2 && r[0]);
     const disponibles = [];
+
     for (let row of rows) {
         const numero = row[0];
         const estado = row[1].toLowerCase();
@@ -97,6 +101,7 @@ async function getBoletasDisponibles() {
             disponibles.push({ id: numero.toString(), title });
         }
     }
+
     return disponibles;
 }
 
