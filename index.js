@@ -1,7 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const { google } = require('googleapis');
 require('dotenv').config();
 
 const app = express();
@@ -12,13 +11,6 @@ app.use(bodyParser.json());
 // ------------------
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'botpress_dinamicas';
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-const SHEET_NAME = process.env.SHEET_NAME;
-
-// ------------------
-// Google Service Account (JSON string en variable)
-// ------------------
-const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
 
 // ------------------
 // Estado temporal de usuarios
@@ -26,84 +18,15 @@ const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
 const userState = {};
 
 // ------------------
-// Google Sheets Auth
+// Boletas predefinidas
 // ------------------
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-const auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
-
-// ------------------
-// Funciones Google Sheets
-// ------------------
-async function verificarNumero(numero) {
-    const client = await auth.getClient();
-    const sheets = google.sheets({ version: 'v4', auth: client });
-
-    const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `'${SHEET_NAME}'!A:B`,
-    });
-
-    const rows = res.data.values || [];
-    for (let row of rows) {
-        if (parseInt(row[0]) === numero) {
-            return row[1].toLowerCase() === 'disponible';
-        }
-    }
-    return false;
-}
-
-async function marcarVendida(numero, cliente) {
-    const client = await auth.getClient();
-    const sheets = google.sheets({ version: 'v4', auth: client });
-
-    const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `'${SHEET_NAME}'!A:B`,
-    });
-
-    const rows = res.data.values || [];
-    let rowIndex = -1;
-    for (let i = 0; i < rows.length; i++) {
-        if (parseInt(rows[i][0]) === numero) {
-            rowIndex = i + 1;
-            break;
-        }
-    }
-
-    if (rowIndex !== -1) {
-        await sheets.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `'${SHEET_NAME}'!B${rowIndex}:C${rowIndex}`,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [['vendido', cliente]] },
-        });
-    }
-}
-
-async function getBoletasDisponibles() {
-    const client = await auth.getClient();
-    const sheets = google.sheets({ version: 'v4', auth: client });
-
-    const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `'${SHEET_NAME}'!A:B`,
-    });
-
-    const rows = res.data.values || [];
-    const disponibles = [];
-
-    for (let row of rows) {
-        const numero = row[0];
-        const estado = row[1]?.toLowerCase() || "";
-        if (estado === "disponible") {
-            let title = `Boleta #${numero}`;
-            if (title.length > 24) title = title.substring(0, 24);
-            disponibles.push({ id: numero.toString(), title });
-        }
-    }
-
-    return disponibles;
-}
+const boletasDisponibles = [
+    { id: "1", title: "Boleta #1" },
+    { id: "2", title: "Boleta #2" },
+    { id: "3", title: "Boleta #3" },
+    { id: "4", title: "Boleta #4" },
+    { id: "5", title: "Boleta #5" },
+];
 
 // ------------------
 // Enviar mensaje WhatsApp
@@ -125,10 +48,7 @@ async function enviarMensaje(phone_number_id, to, text) {
             }
         );
     } catch (error) {
-        console.error(
-            "Error enviando mensaje:",
-            error.response ? error.response.data : error.message
-        );
+        console.error("Error enviando mensaje:", error.response ? error.response.data : error.message);
     }
 }
 
@@ -136,13 +56,6 @@ async function enviarMensaje(phone_number_id, to, text) {
 // Enviar lista interactiva
 // ------------------
 async function sendInteractiveList(phone_number_id, to) {
-    const rows = await getBoletasDisponibles();
-
-    if (rows.length === 0) {
-        await enviarMensaje(phone_number_id, to, "😅 Lo siento, no hay boletas disponibles por ahora.");
-        return;
-    }
-
     const data = {
         messaging_product: "whatsapp",
         to,
@@ -152,7 +65,7 @@ async function sendInteractiveList(phone_number_id, to) {
             header: { type: "text", text: "🎟️ Boletas Dinamicas CC" },
             body: { text: "Selecciona tu boleta disponible:" },
             footer: { text: "Dinamicas CC" },
-            action: { button: "Adquirir boleta", sections: [{ title: "Boletas disponibles", rows }] },
+            action: { button: "Adquirir boleta", sections: [{ title: "Boletas disponibles", rows: boletasDisponibles }] },
         },
     };
 
@@ -163,10 +76,7 @@ async function sendInteractiveList(phone_number_id, to) {
             { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
         );
     } catch (error) {
-        console.error(
-            "Error enviando lista:",
-            error.response ? error.response.data : error.message
-        );
+        console.error("Error enviando lista:", error.response ? error.response.data : error.message);
     }
 }
 
@@ -206,11 +116,11 @@ app.post("/webhook", async (req, res) => {
             } 
             else if (userState[from]?.esperandoBoleta) {
                 if (interactiveId) {
-                    userState[from] = { esperandoNombre: true, numeroElegido: parseInt(interactiveId) };
+                    userState[from] = { esperandoNombre: true, numeroElegido: interactiveId };
                     await enviarMensaje(
                         phone_number_id,
                         from,
-                        "🎟️ Excelente! ¿Cuál es tu nombre completo para registrar tu boleta?"
+                        `🎟️ Excelente! Elegiste la boleta #${interactiveId}. ¿Cuál es tu nombre completo para registrar tu boleta?`
                     );
                 }
             } 
@@ -218,26 +128,16 @@ app.post("/webhook", async (req, res) => {
                 const nombreCliente = message.text?.body?.trim();
                 const numeroDeseado = userState[from].numeroElegido;
 
-                const disponible = await verificarNumero(numeroDeseado);
-                if (disponible) {
-                    await marcarVendida(numeroDeseado, nombreCliente);
-                    const reply = `🎟️ Tu número ${numeroDeseado} ha sido registrado a nombre de ${nombreCliente}.
+                const reply = `🎟️ Tu número ${numeroDeseado} ha sido registrado a nombre de ${nombreCliente}.
 Realiza la transferencia del costo de la boleta ($60.000) a una de estas cuentas:
 
 Bancolombia (Ahorros): 123456789 - Dinamicas CC
 Davivienda (Corriente): 987654321 - Dinamicas CC
 
 ¡Muchísima suerte! 🍀`;
-                    delete userState[from];
-                    await enviarMensaje(phone_number_id, from, reply);
-                } else {
-                    await enviarMensaje(
-                        phone_number_id,
-                        from,
-                        `Lo sentimos 😅, el número ${numeroDeseado} ya no está disponible. Elige otro número.`
-                    );
-                    delete userState[from];
-                }
+
+                delete userState[from];
+                await enviarMensaje(phone_number_id, from, reply);
             } 
             else {
                 await enviarMensaje(
