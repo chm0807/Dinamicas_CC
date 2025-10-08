@@ -15,8 +15,9 @@ const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = process.env.SHEET_NAME;
 
-
-// Esto es todo, sin fs
+// ------------------
+// Google Service Account (JSON string en variable)
+// ------------------
 const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
 
 // ------------------
@@ -82,20 +83,30 @@ async function marcarVendida(numero, cliente) {
 // ------------------
 async function enviarMensaje(phone_number_id, to, text) {
   try {
-    await axios.post(`https://graph.facebook.com/v17.0/${phone_number_id}/messages`, {
-      messaging_product: "whatsapp",
-      to,
-      text: { body: text }
-    }, {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' }
-    });
+    await axios.post(
+      `https://graph.facebook.com/v17.0/${phone_number_id}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to,
+        text: { body: text },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
   } catch (error) {
-    console.error('Error enviando mensaje:', error.response ? error.response.data : error.message);
+    console.error(
+      "Error enviando mensaje:",
+      error.response ? error.response.data : error.message
+    );
   }
 }
 
 // ------------------
-// Lista interactiva
+// Enviar lista interactiva
 // ------------------
 async function sendInteractiveList(phone_number_id, to) {
   const data = {
@@ -104,89 +115,132 @@ async function sendInteractiveList(phone_number_id, to) {
     type: "interactive",
     interactive: {
       type: "list",
-      header: { type: "text", text: "🎟️ Boleta Tres de Oros♣️" },
-      body: { text: `🎉 ¡Hola! Qué alegría verte 😍
-Nuestra boleta única: Tres de Oros♣️
+      header: { type: "text", text: "🎟️ Dinámicas CC - Rifas Tres de Oros♣️" },
+      body: {
+        text: `🎉 ¡Hola! Qué alegría verte 😍
+Te contamos que nuestra boleta única: Tres de Oros♣️
 🏍️ 2 motos Boxer CT 125 modelo 2026
 🚙 Una camioneta Subaru Forester
 🔖 5 millones representados en oro
 🎄 Gran parranda navideña el 20 de diciembre
-💰 Valor de la boleta: $60.000
-Selecciona la boleta para asegurar tu oportunidad ✨` },
+💰 Lo mejor de todo es que el valor de la boleta es de: $60.000
+Selecciona la boleta para asegurar tu oportunidad ✨`,
+      },
       footer: { text: "Dinamicas CC" },
       action: {
         button: "Adquirir boleta",
-        sections: [{ title: "Boleta", rows: [{ id: "tres_de_oros", title: "Tres de Oros♣️ - $60.000" }] }]
-      }
-    }
+        sections: [
+          {
+            title: "Boleta",
+            rows: [{ id: "tres_de_oros", title: "Boleta Tres de Oros♣️ - $60.000" }],
+          },
+        ],
+      },
+    },
   };
 
   try {
-    await axios.post(`https://graph.facebook.com/v17.0/${phone_number_id}/messages`, data, {
-      headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' }
-    });
+    await axios.post(
+      `https://graph.facebook.com/v17.0/${phone_number_id}/messages`,
+      data,
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
   } catch (error) {
-    console.error('Error enviando lista:', error.response ? error.response.data : error.message);
+    console.error(
+      "Error enviando lista:",
+      error.response ? error.response.data : error.message
+    );
   }
 }
 
 // ------------------
-// Endpoints webhook
+// Webhook GET (Verificación)
 // ------------------
-app.get('/webhook', (req, res) => {
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+app.get("/webhook", (req, res) => {
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
   if (token === VERIFY_TOKEN) return res.status(200).send(challenge);
   else return res.sendStatus(403);
 });
 
-app.post('/webhook', async (req, res) => {
+// ------------------
+// Webhook POST (Mensajes)
+// ------------------
+app.post("/webhook", async (req, res) => {
   const body = req.body;
 
   if (body.object === "whatsapp_business_account") {
     const changes = body.entry[0].changes[0].value;
 
     if (changes.messages && changes.messages.length > 0) {
-      const from = changes.messages[0].from;
-      const text = changes.messages[0].text?.body.toLowerCase() || '';
+      const message = changes.messages[0];
+      const from = message.from;
       const phone_number_id = changes.metadata.phone_number_id;
 
-      // Lógica del bot
-      if (text.includes('hola') || text.includes('boletas')) {
+      // Texto normal
+      let text = message.text?.body?.toLowerCase() || "";
+      // Respuesta interactiva (lista/botón)
+      let interactiveId =
+        message.interactive?.button_reply?.id ||
+        message.interactive?.list_reply?.id;
+
+      // --- Lógica de estados ---
+      if (text.includes("hola") || text.includes("boletas")) {
         await sendInteractiveList(phone_number_id, from);
         userState[from] = { esperandoBoleta: true };
-      }
+      } 
       else if (userState[from]?.esperandoBoleta) {
-        if (text.includes('tres de oros') || text.includes('tres_de_oros')) {
-          await enviarMensaje(phone_number_id, from, '🎟️ Excelente elección! Ahora, ¿qué número deseas?');
+        if (interactiveId === "tres_de_oros" || text.includes("tres de oros")) {
+          await enviarMensaje(
+            phone_number_id,
+            from,
+            "🎟️ Excelente elección! Ahora cuentame, ¿qué número deseas?"
+          );
           userState[from] = { esperandoNumero: true };
         }
-      }
+      } 
       else if (userState[from]?.esperandoNumero) {
         const numeroDeseado = parseInt(text);
         if (isNaN(numeroDeseado)) {
-          await enviarMensaje(phone_number_id, from, 'Por favor ingresa un número válido.');
+          await enviarMensaje(
+            phone_number_id,
+            from,
+            "Por favor ingresa un número válido, debe ser de 4 cifras."
+          );
         } else {
           const disponible = await verificarNumero(numeroDeseado);
           if (disponible) {
             const reply = `🎟️ Tu número ${numeroDeseado} está disponible.
-Realiza la transferencia de $60.000 a una de estas cuentas:
+Realiza la transferencia del costo de la boleta, recuerda que tiene un costo de: $60.000 a una de estas cuentas:
 
 Bancolombia (Ahorros): 123456789 - Dinamicas CC
 Davivienda (Corriente): 987654321 - Dinamicas CC
 
-¡Muchísima suerte! 🍀`;
+¡Muchísima suerte! que la suerte este de tu lado 🍀`;
 
             await marcarVendida(numeroDeseado, from);
             delete userState[from];
             await enviarMensaje(phone_number_id, from, reply);
           } else {
-            await enviarMensaje(phone_number_id, from, `Lo sentimos 😅, el número ${numeroDeseado} ya no está disponible. Elige otro número.`);
+            await enviarMensaje(
+              phone_number_id,
+              from,
+              `Lo sentimos 😅, el número ${numeroDeseado} ya no está disponible. Elige otro número no le huyas a la suerte.`
+            );
           }
         }
-      }
+      } 
       else {
-        await enviarMensaje(phone_number_id, from, `Hola! Recibí tu mensaje: "${text}"`);
+        await enviarMensaje(
+          phone_number_id,
+          from,
+          `Hola! Recibí tu mensaje: "${text}"`
+        );
       }
     }
   }
