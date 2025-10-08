@@ -132,7 +132,7 @@ Selecciona la boleta para asegurar tu oportunidad ✨`,
         sections: [
           {
             title: "Boleta",
-            rows: [{ id: "tres_de_oros", title: "Boleta Tres de Oros♣️ - $60.000" }],
+            rows: [{ id: "tres_de_oros", title: "Tres de Oros♣️ - $60.000" }],
           },
         ],
       },
